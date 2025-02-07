@@ -216,20 +216,20 @@ if __name__ == "__main__":
     node2 = Node("127.0.0.1", 5001)
     
     time.sleep(5)
-    debug_node_info(node1)
-    debug_node_info(node2)
+    # debug_node_info(node1)
+    # debug_node_info(node2)
 
     time.sleep(1)
     node2.join("127.0.0.1", 5000)
     time.sleep(5)
 
-    debug_node_info(node1)
-    debug_node_info(node2)
+    # debug_node_info(node1)
+    # debug_node_info(node2)
 
     node3 = Node("127.0.0.1", 5002)
 
     time.sleep(5)
-    debug_node_info(node3)
+    # debug_node_info(node3)
 
     time.sleep(1)
     node3.join("127.0.0.1", 5000)
@@ -238,7 +238,7 @@ if __name__ == "__main__":
     node4 = Node("127.0.0.1", 5003)
 
     time.sleep(5)
-    debug_node_info(node4)
+    # debug_node_info(node4)
 
     time.sleep(1)
     node4.join("127.0.0.1", 5000)

@@ -1,77 +1,78 @@
 import sys
 import threading
-import socket
 from node import Node
 from utils import debug_node_info
-
-# Function to handle incoming UDP messages
-def udp_listener(node):
-    while True:
-        data, addr = node.sock.recvfrom(1024)
-        message = data.decode()
-
-        # Clear the current input line
-        sys.stdout.write('\r')
-        sys.stdout.flush()
-
-        # Display the incoming message
-        print(f"[Received from {addr}] {message}")
-
-        # Redisplay the prompt
-        print("\n=== Chord Node CLI ===")
-        print("1. JOIN")
-        print("2. STORE")
-        print("3. LOOKUP")
-        print("4. LEAVE")
-        print("5. INFO")
-        print("6. EXIT")
-        sys.stdout.write("Select an option (1-6): ")
-        sys.stdout.flush()
-
-        node.handle_message(message, addr)
+from prompt_toolkit import prompt
+from prompt_toolkit.patch_stdout import patch_stdout
 
 # Prompt for port
 port = int(input("Enter Port number: "))
 node = Node("127.0.0.1", port)
 
-# Start the UDP listener thread
-threading.Thread(target=udp_listener, args=(node,), daemon=True).start()
+def cli_loop():
+    while True:
+        with patch_stdout():
+            user_input = prompt(
+                "\n=== Chord Node CLI ===\n"
+                "Commands:\n"
+                "  JOIN <ip> <port>\n"
+                "  STORE <key> <value>\n"
+                "  LOOKUP <key>\n"
+                "  LEAVE\n"
+                "  INFO\n"
+                "  EXIT\n"
+                "Enter command: "
+            ).strip()
 
-# Command loop
-while True:
-    print("\n=== Chord Node CLI ===")
-    print("1. JOIN")
-    print("2. STORE")
-    print("3. LOOKUP")
-    print("4. LEAVE")
-    print("5. INFO")
-    print("6. EXIT")
-    command = input("Select an option (1-6): ").strip()
+        # Split input into parts (command + arguments)
+        parts = user_input.split()
+        if not parts:
+            continue  # Ignore empty input
 
-    if command == "1":  # JOIN
-        known_ip = input("Enter known node IP: ")
-        known_port = int(input("Enter known node Port: "))
-        node.join(known_ip, known_port)
+        command = parts[0].upper()
+        args = parts[1:]
 
-    elif command == "2":  # STORE
-        key = input("Enter key to store: ")
-        value = input("Enter value: ")
-        node.store(key, value)
+        if command == "JOIN":
+            if len(args) != 2:
+                print("Usage: JOIN <ip> <port>")
+                continue
+            try:
+                known_ip = args[0]
+                known_port = int(args[1])
+                node.join(known_ip, known_port)
+            except ValueError:
+                print("Error: Port must be a number.")
 
-    elif command == "3":  # LOOKUP
-        key = input("Enter key to lookup: ")
-        node.lookup(key)
+        elif command == "STORE":
+            if len(args) < 2:
+                print("Usage: STORE <key> <value>")
+                continue
+            key = args[0]
+            value = " ".join(args[1:])  # Allow multi-word values
+            node.store(key, value)
 
-    elif command == "4":  # LEAVE
-        print(f"Node {node.id} leaving the network...")
-        sys.exit()
+        elif command == "LOOKUP":
+            if len(args) != 1:
+                print("Usage: LOOKUP <key>")
+                continue
+            key = args[0]
+            node.lookup(key)
 
-    elif command == "5":  # INFO
-        debug_node_info(node)
+        elif command == "LEAVE":
+            print(f"Node {node.id} leaving the network...")
+            sys.exit()
 
-    elif command == "6":  # EXIT
-        print("Exiting...")
-        sys.exit()
+        elif command == "INFO":
+            debug_node_info(node)
 
-    else:
-        print("Invalid option. Please select 1-6.")
+        elif command == "EXIT":
+            print("Exiting...")
+            sys.exit()
+
+        else:
+            print("Invalid command. Type one of: JOIN, STORE, LOOKUP, LEAVE, INFO, EXIT.")
+
+if __name__ == "__main__":
+    cli_thread = threading.Thread(target=cli_loop, daemon=True)
+    cli_thread.start()
+    cli_thread.join()

@@ -89,8 +89,8 @@ class Chord:
 
     def stabilize(self):
         """
-        A version of stabilization that can be called to help update the node’s view.
-        (Note: The main stabilization is performed by the Node’s own stabilize() method.)
+        A version of stabilization that can be called to help update the node's view.
+        (Note: The main stabilization is performed by the Node's own stabilize() method.)
         This routine queries the successor for its predecessor and then notifies the successor.
         """
         try:
