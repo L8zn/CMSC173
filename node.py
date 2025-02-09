@@ -27,11 +27,11 @@ class Node:
         self.sock.bind((ip, port))
 
         # Start background threads.
+        self.stop_event = threading.Event() 
         threading.Thread(target=self.listen, daemon=True).start()
         threading.Thread(target=self.stabilize, daemon=True).start()
         threading.Thread(target=self.fix_fingers, daemon=True).start()
         threading.Thread(target=self.check_predecessor, daemon=True).start()
-        self.stop_event = threading.Event() 
 
     def listen(self):
         """Continuously listen for incoming UDP messages and handle them."""
@@ -102,14 +102,14 @@ class Node:
             new_pred_port = int(parts[2])
             new_pred_id = int(parts[3])
             self.predecessor = {"ip": new_pred_ip, "port": new_pred_port, "id": new_pred_id}
-            print(f"Node {self.id} updated predecessor to {self.predecessor['id']}")
+            print(f"Node {self.id} updated predecessor to Node {self.predecessor['id']}")
         elif command == "UPDATE_SUCCESSOR_TO":
             # Update this node's successor
             new_succ_ip = parts[1]
             new_succ_port = int(parts[2])
             new_succ_id = int(parts[3])
             self.successor = {"ip": new_succ_ip, "port": new_succ_port, "id": new_succ_id}
-            print(f"Node {self.id} updated successor to {self.successor['id']}")
+            print(f"Node {self.id} updated successor to Node {self.successor['id']}")
         elif command == "STORE":
             # Store a key-value pair in the responsible node.
             key = parts[1]
@@ -210,7 +210,7 @@ class Node:
         Periodically check whether the predecessor is still alive.
         If no heartbeat is received within a threshold, remove the predecessor.
         """
-        while True:
+        while True and not self.stop_event.is_set():
             if self.predecessor:
                 self.send_message(self.predecessor["ip"], self.predecessor["port"], "PING")
                 if time.time() - self.last_predecessor_heartbeat > 15:
@@ -236,15 +236,14 @@ class Node:
             ## self.successor.predecessor = self.predecessor
             self.send_message(self.successor["ip"], self.successor["port"], 
                 f"UPDATE_PREDECESSOR_TO {self.predecessor['ip']} {self.predecessor['port']} {self.predecessor['id']}")
-            time.sleep(0.5)
         # If node has a predecessor, then inform predecessor to update its successor
         if self.predecessor and self.predecessor["id"] != self.id:
             ## self.predecessor.successor = self.successor
             self.send_message(self.predecessor["ip"], self.predecessor["port"], 
                 f"UPDATE_SUCCESSOR_TO {self.successor['ip']} {self.successor['port']} {self.successor['id']}")
-            time.sleep(0.5)
         # Notify other nodes to update their finger tables (via stabilize function)
         # Stop running threads, then close socket connection
+        time.sleep(0.5)
         self.stop_event.set()
         time.sleep(0.5)
         self.sock.close()       
