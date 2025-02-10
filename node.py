@@ -175,7 +175,7 @@ class Node:
              and, if that node lies between this node and its successor, update the successor pointer.
           3. Finally, notify the (possibly updated) successor about this node.
         """
-        while True:
+        while True and not self.stop_event.is_set():
             # If the node is not alone (has a non-self predecessor) but its successor is still self,
             # update the successor pointer immediately.
             if self.successor["id"] == self.id and self.predecessor is not None and self.predecessor["id"] != self.id:
@@ -245,7 +245,7 @@ class Node:
         # Stop running threads, then close socket connection
         time.sleep(0.5)
         self.stop_event.set()
-        time.sleep(0.5)
+        print(f"Node {self.id} has exited the Chord ring.")
         self.sock.close()       
 
 # --- For testing purposes ---
