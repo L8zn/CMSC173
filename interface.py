@@ -59,8 +59,7 @@ def cli_loop():
             node.lookup(key)
 
         elif command == "LEAVE":
-            print(f"Node {node.id} leaving the network...")
-            sys.exit()
+            node.leave()
 
         elif command == "INFO":
             debug_node_info(node)
