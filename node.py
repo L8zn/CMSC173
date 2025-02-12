@@ -27,6 +27,7 @@ class Node:
         self.sock.bind((ip, port))
 
         # Start background threads.
+        self.stop_event = threading.Event() 
         threading.Thread(target=self.listen, daemon=True).start()
         threading.Thread(target=self.stabilize, daemon=True).start()
         threading.Thread(target=self.fix_fingers, daemon=True).start()
@@ -41,8 +42,9 @@ class Node:
                 message = data.decode()
                 print(f"Node {self.id} received message from {addr}: {message}")
                 self.handle_message(message, addr)
-            except Exception as e:
-                print(f"Error in listening: {e}")
+            except OSError or Exception as e:
+                if not self.stop_event.is_set():  # Ignore errors if shutting down
+                    print(f"Error in listening: {e}")
 
     def send_message(self, target_ip, target_port, message):
         """Send a UDP message to the specified target."""
@@ -94,6 +96,20 @@ class Node:
                 pred_port = int(parts[2])
                 pred_id = int(parts[3])
                 self.temp_predecessor = {"ip": pred_ip, "port": pred_port, "id": pred_id}
+        elif command == "UPDATE_PREDECESSOR_TO":
+            # Update this node's predecessor
+            new_pred_ip = parts[1]
+            new_pred_port = int(parts[2])
+            new_pred_id = int(parts[3])
+            self.predecessor = {"ip": new_pred_ip, "port": new_pred_port, "id": new_pred_id}
+            print(f"Node {self.id} updated predecessor to Node {self.predecessor['id']}")
+        elif command == "UPDATE_SUCCESSOR_TO":
+            # Update this node's successor
+            new_succ_ip = parts[1]
+            new_succ_port = int(parts[2])
+            new_succ_id = int(parts[3])
+            self.successor = {"ip": new_succ_ip, "port": new_succ_port, "id": new_succ_id}
+            print(f"Node {self.id} updated successor to Node {self.successor['id']}")
         elif command == "STORE":
             # Store a key-value pair in the responsible node.
             key = parts[1]
@@ -159,7 +175,7 @@ class Node:
              and, if that node lies between this node and its successor, update the successor pointer.
           3. Finally, notify the (possibly updated) successor about this node.
         """
-        while True:
+        while True and not self.stop_event.is_set():
             # If the node is not alone (has a non-self predecessor) but its successor is still self,
             # update the successor pointer immediately.
             if self.successor["id"] == self.id and self.predecessor is not None and self.predecessor["id"] != self.id:
@@ -194,7 +210,7 @@ class Node:
         Periodically check whether the predecessor is still alive.
         If no heartbeat is received within a threshold, remove the predecessor.
         """
-        while True:
+        while True and not self.stop_event.is_set():
             if self.predecessor:
                 self.send_message(self.predecessor["ip"], self.predecessor["port"], "PING")
                 if time.time() - self.last_predecessor_heartbeat > 15:
@@ -209,6 +225,28 @@ class Node:
     def lookup(self, key):
         """Initiate a lookup command on this node."""
         self.send_message(self.ip, self.port, f"LOOKUP {key}")
+
+    def leave(self):
+        print(f"Node {self.id} leaving the network... [LINE FOR DEBUGGING]")
+        # If node has a successor, then transfer node data to successor AND inform successor to update its predecessor
+        if self.successor and self.successor["id"] != self.id:
+            for key, value in self.data_store.items():
+                self.send_message(self.successor["ip"], self.successor["port"], f"STORE {key} {value}")
+            print(f"Node {self.id} transferred data to successor {self.successor['id']}")
+            ## self.successor.predecessor = self.predecessor
+            self.send_message(self.successor["ip"], self.successor["port"], 
+                f"UPDATE_PREDECESSOR_TO {self.predecessor['ip']} {self.predecessor['port']} {self.predecessor['id']}")
+        # If node has a predecessor, then inform predecessor to update its successor
+        if self.predecessor and self.predecessor["id"] != self.id:
+            ## self.predecessor.successor = self.successor
+            self.send_message(self.predecessor["ip"], self.predecessor["port"], 
+                f"UPDATE_SUCCESSOR_TO {self.successor['ip']} {self.successor['port']} {self.successor['id']}")
+        # Notify other nodes to update their finger tables (via stabilize function)
+        # Stop running threads, then close socket connection
+        time.sleep(0.5)
+        self.stop_event.set()
+        print(f"Node {self.id} has exited the Chord ring.")
+        self.sock.close()       
 
 # --- For testing purposes ---
 if __name__ == "__main__":
@@ -249,3 +287,9 @@ if __name__ == "__main__":
     debug_node_info(node2)
     debug_node_info(node3)
     debug_node_info(node4)
+
+    node4.leave()
+    time.sleep(10)
+    debug_node_info(node1)
+    debug_node_info(node2)
+    debug_node_info(node3)
