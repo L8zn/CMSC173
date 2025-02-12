@@ -11,6 +11,7 @@ class Node:
         self.id = hash_function(f"{ip}:{port}")
         # Initially, the node is alone in the ring.
         self.successor = {"ip": ip, "port": port, "id": self.id}
+        self.successor_list = [self.successor]
         self.predecessor = None
         self.data_store = {}  # Key-value storage
 
@@ -148,32 +149,60 @@ class Node:
             key = parts[1]
             value = parts[2]
             print(f"Lookup result for {key}: {value}")
+        elif command == "UPDATE_FINGER":
+            new_ip = parts[1]
+            new_port = int(parts[2])
+            new_id = int(parts[3])
+            i = int(parts[4])
+            new_node_info = {"ip": new_ip, "port": new_port, "id": new_id}
+            print(f"Node {self.id} received UPDATE_FINGER for node {new_id} at index {i}")
+            self.chord.update_finger_table_entry(new_node_info, i)
+        # In node.py, inside the handle_message() method
+
+        elif command == "GET_SUCCESSOR_LIST":
+            # Reply with the current successor list.
+            msg = "SUCCESSOR_LIST " + str(len(self.successor_list))
+            for succ in self.successor_list:
+                msg += f" {succ['ip']} {succ['port']} {succ['id']}"
+            self.send_message(addr[0], addr[1], msg)
+
+        elif command == "SUCCESSOR_LIST":
+            # Format: SUCCESSOR_LIST <count> <ip1> <port1> <id1> <ip2> <port2> <id2> ...
+            count = int(parts[1])
+            new_list = []
+            for j in range(count):
+                base = 2 + j * 3
+                ip = parts[base]
+                port = int(parts[base + 1])
+                id = int(parts[base + 2])
+                new_list.append({"ip": ip, "port": port, "id": id})
+            self.successor_list = new_list
+            if new_list:
+                self.successor = new_list[0]
+                print(f"Node {self.id} updated its successor list: {self.successor_list}")
 
     def join(self, known_node_ip, known_node_port):
-        """
-        Join the Chord ring.
-        If the node is the first node (i.e. joining itself), it initializes its own ring.
-        Otherwise, it contacts a known node to locate its successor.
-        """
         if known_node_ip == self.ip and known_node_port == self.port:
-            # This node is the first in the ring.
             self.predecessor = None
             self.successor = {"ip": self.ip, "port": self.port, "id": self.id}
             print(f"Node {self.id} initialized as the first node in the ring.")
         else:
             print(f"Node {self.id} joining ring via {known_node_ip}:{known_node_port}")
             self.send_message(known_node_ip, known_node_port, f"FIND_SUCCESSOR {self.id}")
-            # The SUCCESSOR reply (handled asynchronously) will update our successor pointer.
+            # After the SUCCESSOR reply updates our successor, trigger update_others.
+            time.sleep(1)  # Consider a brief wait to allow successor update
+            self.chord.update_others()
 
     def stabilize(self):
         """
         Periodically verify and update the successor pointer.
         This routine works as follows:
-          1. If the node's successor pointer still equals itself even though a valid predecessor exists,
-             then update the successor pointer immediately.
-          2. Otherwise, query the current successor for its predecessor (via GET_PREDECESSOR)
-             and, if that node lies between this node and its successor, update the successor pointer.
-          3. Finally, notify the (possibly updated) successor about this node.
+        1. If the node's successor pointer still equals itself even though a valid predecessor exists,
+            then update the successor pointer immediately.
+        2. Otherwise, query the current successor for its predecessor (via GET_PREDECESSOR)
+            and, if that node lies between this node and its successor, update the successor pointer.
+        3. Request the successor list from the current successor for added robustness.
+        4. Finally, notify the (possibly updated) successor about this node.
         """
         while True and not self.stop_event.is_set():
             # If the node is not alone (has a non-self predecessor) but its successor is still self,
@@ -191,6 +220,8 @@ class Node:
                     if x and in_range(x["id"], self.id, self.successor["id"]):
                         self.successor = x
                         print(f"Node {self.id} updated its successor to {self.successor} via stabilization")
+                    # Request the successor list from the current successor.
+                    self.send_message(self.successor["ip"], self.successor["port"], "GET_SUCCESSOR_LIST")
             # Notify the (possibly updated) successor about ourselves.
             self.send_message(self.successor["ip"], self.successor["port"], f"NOTIFY {self.id}")
             self.chord.update_finger_table()

@@ -1,4 +1,5 @@
 import socket
+import time
 from utils import hash_function, in_range
 
 class Chord:
@@ -10,6 +11,36 @@ class Chord:
         self.node = node
         self.m = m
         self.finger_table = [None] * m
+
+    def init_finger_table(self):
+        """
+        Optimized initialization of the finger table.
+        1. The first finger is set to the successor of (node.id + 1).
+        2. The node's successor is updated based on the first finger.
+        3. The node's predecessor is obtained from that successor.
+        4. Subsequent finger entries are set recursively to reduce lookup overhead.
+        """
+        mod = 2 ** self.m
+        # 1. Set the first finger entry.
+        start = (self.node.id + 1) % mod
+        self.finger_table[0] = self.find_successor(start)
+        # Update the node's successor.
+        self.node.successor = self.finger_table[0]
+        
+        # 2. Obtain the predecessor from the first finger (assumes the node will update node.temp_predecessor).
+        self.node.send_message(self.finger_table[0]["ip"], self.finger_table[0]["port"], "GET_PREDECESSOR")
+        time.sleep(0.5)  # Brief pause for a reply.
+        if hasattr(self.node, 'temp_predecessor') and self.node.temp_predecessor is not None:
+            self.node.predecessor = self.node.temp_predecessor
+
+        # 3. Initialize the rest of the finger table.
+        for i in range(self.m - 1):
+            next_start = (self.node.id + 2 ** (i + 1)) % mod
+            # If next_start falls within [node.id, finger[i].id], reuse the finger entry.
+            if self.finger_table[i] and in_range(next_start, self.node.id, self.finger_table[i]["id"], include_end=True):
+                self.finger_table[i + 1] = self.finger_table[i]
+            else:
+                self.finger_table[i + 1] = self.find_successor(next_start)
 
     def find_successor(self, id):
         """
@@ -118,3 +149,38 @@ class Chord:
         if (self.node.predecessor is None or
             in_range(node_info["id"], self.node.predecessor["id"], self.node.id, include_end=False)):
             self.node.predecessor = node_info
+
+    def update_others(self):
+        """
+        Inform all nodes that should have this node in their finger table
+        about the joining node.
+        """
+        new_node_info = {"ip": self.node.ip, "port": self.node.port, "id": self.node.id}
+        for i in range(self.m):
+            lookup_id = (self.node.id - 2 ** i) % (2 ** self.m)
+            pred = self.find_successor(lookup_id)  # Use find_successor to get the predecessor
+            # If the found node is not self, send it an update request.
+            if pred["id"] != self.node.id:
+                self.node.send_message(
+                    pred["ip"],
+                    pred["port"],
+                    f"UPDATE_FINGER {new_node_info['ip']} {new_node_info['port']} {new_node_info['id']} {i}"
+                )
+
+    def update_finger_table_entry(self, new_node_info, i):
+        """
+        Update the finger table entry at index i if the new node
+        should be responsible for that slot. If an update occurs,
+        propagate the change to the predecessor.
+        """
+        current_id = self.node.id
+        ft_entry = self.finger_table[i]
+        # Check if new_node_info["id"] is in [current_id, ft_entry["id"]) in the ID circle.
+        if ft_entry is None or in_range(new_node_info["id"], current_id, ft_entry["id"], include_end=False):
+            self.finger_table[i] = new_node_info
+            if self.node.predecessor and self.node.predecessor["id"] != new_node_info["id"]:
+                self.node.send_message(
+                    self.node.predecessor["ip"],
+                    self.node.predecessor["port"],
+                    f"UPDATE_FINGER {new_node_info['ip']} {new_node_info['port']} {new_node_info['id']} {i}"
+                )
