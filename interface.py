@@ -1,7 +1,7 @@
 import sys
 import threading
 from node import Node
-from utils import debug_node_info
+from utils import node_info
 from prompt_toolkit import prompt
 from prompt_toolkit.patch_stdout import patch_stdout
 
@@ -13,7 +13,7 @@ def cli_loop():
     while True:
         with patch_stdout():
             user_input = prompt(
-                "\n=== Chord Node CLI ===\n"
+                f"\n=== Chord Node CLI ===\n"
                 "Commands:\n"
                 "  JOIN <ip> <port>\n"
                 "  STORE <key> <value>\n"
@@ -62,7 +62,7 @@ def cli_loop():
             node.leave()
 
         elif command == "INFO":
-            debug_node_info(node)
+            node_info(node)
 
         elif command == "EXIT":
             print("Exiting...")

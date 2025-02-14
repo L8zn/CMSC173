@@ -1,5 +1,6 @@
 import socket
-from utils import hash_function, in_range
+import time
+from utils import in_range
 
 class Chord:
     def __init__(self, node, m=8):
@@ -86,35 +87,80 @@ class Chord:
         except Exception as e:
             print(f"[Chord.rpc_find_successor] Error contacting candidate {candidate}: {e}")
         return None
-
-    def stabilize(self):
-        """
-        A version of stabilization that can be called to help update the node's view.
-        (Note: The main stabilization is performed by the Node's own stabilize() method.)
-        This routine queries the successor for its predecessor and then notifies the successor.
-        """
+    
+    def is_node_alive(self, node_info, timeout=1):
+        """Synchronous ping to check if a node is alive."""
         try:
             temp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            temp_sock.settimeout(2)
+            temp_sock.settimeout(timeout)
             temp_sock.bind(('', 0))
-            temp_sock.sendto("GET_PREDECESSOR".encode(), (self.node.successor["ip"], self.node.successor["port"]))
+            temp_sock.sendto("PING".encode(), (node_info["ip"], node_info["port"]))
             data, _ = temp_sock.recvfrom(1024)
-            parts = data.decode().split()
-            if parts[0] == "PREDECESSOR" and parts[1] != "NONE":
-                pred = {"ip": parts[1], "port": int(parts[2]), "id": int(parts[3])}
-                if in_range(pred["id"], self.node.id, self.node.successor["id"], include_end=False):
-                    self.node.successor = pred
             temp_sock.close()
+            return data.decode().strip() == "PONG"
         except Exception as e:
-            print(f"[Chord.stabilize] Stabilization RPC error: {e}")
-        # Notify the successor.
-        self.node.send_message(self.node.successor["ip"], self.node.successor["port"], f"NOTIFY {self.node.id}")
+            return False
 
-    def notify(self, node_info):
-        """
-        Called when a remote node notifies this node that it might be its predecessor.
-        Update the predecessor pointer if needed.
-        """
-        if (self.node.predecessor is None or
-            in_range(node_info["id"], self.node.predecessor["id"], self.node.id, include_end=False)):
-            self.node.predecessor = node_info
+    def prune_successor_list(self):
+        """Remove entries from the successor list that are not responding."""
+        alive_list = []
+        # Always keep self.node.successor_list[0] (immediate successor) if it's alive.
+        for entry in self.node.successor_list:
+            # If the entry is self, always keep it.
+            if entry["id"] == self.node.id:
+                alive_list.append(entry)
+            else:
+                if self.is_node_alive(entry):
+                    alive_list.append(entry)
+        # Ensure we have at least one entry (the immediate successor)
+        if alive_list:
+            self.node.successor_list = alive_list
+            self.successor = self.node.successor_list[0]
+        else:
+            # If no successor is alive, fallback to self.
+            self.node.successor_list = [ {"ip": self.node.ip, "port": self.node.port, "id": self.node.id} ]
+            self.node.successor = self.node.successor_list[0]
+
+    def stabilize(self):
+        if self.node.successor["id"] == self.node.id and self.node.predecessor is not None and self.node.predecessor["id"] != self.node.id:
+            self.node.successor = self.node.predecessor
+            if self.node.successor_list:
+                self.node.successor_list[0] = self.node.successor
+            print(f"Node {self.node.id} updated its successor to its predecessor: {self.node.successor}")
+        else:
+            if self.node.successor["id"] != self.node.id:
+                self.node.temp_predecessor = None
+                self.node.send_message(self.successor["ip"], self.successor["port"], "GET_PREDECESSOR")
+                time.sleep(0.5)
+                x = self.node.temp_predecessor
+                if x and in_range(x["id"], self.node.id, self.node.successor["id"]):
+                    self.node.successor = x
+                    if self.node.successor_list:
+                        self.node.successor_list[0] = self.node.successor
+                    print(f"Node {self.node.id} updated its successor to {self.node.successor} via stabilization")
+
+    def update_successor_list(self):
+        if self.node.successor["id"] != self.node.id:
+            try:
+                temp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                temp_sock.settimeout(2)
+                temp_sock.bind(('', 0))
+                temp_sock.sendto("GET_SUCCESSOR_LIST".encode(), (self.node.successor["ip"], self.node.successor["port"]))
+                data, _ = temp_sock.recvfrom(1024)
+                parts = data.decode().split()
+                if parts[0] == "SUCCESSOR_LIST":
+                    new_list = []
+                    entries = (len(parts) - 1) // 3
+                    for i in range(entries):
+                        entry_ip = parts[1 + 3*i]
+                        entry_port = int(parts[2 + 3*i])
+                        entry_id = int(parts[3 + 3*i])
+                        new_list.append({"ip": entry_ip, "port": entry_port, "id": entry_id})
+                    self.node.successor_list = [self.node.successor]
+                    for entry in new_list:
+                        if entry["id"] != self.node.id and len(self.node.successor_list) < self.node.r:
+                            self.node.successor_list.append(entry)
+                    # print(f"Node {self.node.id} updated its successor list to: {self.node.successor_list}")
+                temp_sock.close()
+            except Exception as e:
+                print(f"[stabilize] Error fetching successor list: {e}")

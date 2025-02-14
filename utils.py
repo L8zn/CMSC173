@@ -41,16 +41,23 @@ def display_finger_table(node):
 
     print("-" * 46)
 
-def debug_node_info(node):
+def node_info(node):
     """
     Displays debugging information for the node, including its ID, IP/port,
-    successor, predecessor, and its finger table.
+    successor, predecessor, successor list, and its finger table.
     """
     print("\n=== Node Information ===")
-    print(f"Node ID      : {node.id}")
-    print(f"IP Address   : {node.ip}")
-    print(f"Port         : {node.port}")
-    print(f"Successor ID : {node.successor['id'] if node.successor else 'None'}")
+    print(f"Node ID       : {node.id}")
+    print(f"IP Address    : {node.ip}")
+    print(f"Port          : {node.port}")
+    print(f"Successor ID  : {node.successor['id'] if node.successor else 'None'}")
     print(f"Predecessor ID: {node.predecessor['id'] if node.predecessor else 'None'}")
+    # Display the full successor list:
+    if hasattr(node, 'successor_list') and node.successor_list:
+        succ_list_ids = [entry['id'] for entry in node.successor_list]
+        print(f"Successor List: {succ_list_ids}")
+    else:
+        print("Successor List: None")
     print("=" * 24)
     display_finger_table(node)
+
