@@ -1,6 +1,6 @@
 # Chord Protocol Implementation
 
-This project implements the Chord protocol, a scalable peer-to-peer lookup service as described in [Chord: A Scalable Peer-to-peer Lookup Service for Internet Applications]([https://pdos.csail.mit.edu/papers/chord:sigcomm05/chord_sigcomm05.pdf](https://pdos.csail.mit.edu/papers/chord:sigcomm01/chord_sigcomm.pdf)) by Stoica et al. The implementation includes node joins, finger table construction, stabilization, failure handling, and data replication.
+This project implements the Chord protocol, a scalable peer-to-peer lookup service as described in [Chord: A Scalable Peer-to-peer Lookup Service for Internet Applications](https://pdos.csail.mit.edu/papers/ton:chord/paper-ton.pdf) by Stoica et al. The implementation includes node joins, finger table construction, stabilization, failure handling, and data replication.
 
 ## Project Structure
 
