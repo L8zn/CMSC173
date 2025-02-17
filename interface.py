@@ -6,8 +6,10 @@ from prompt_toolkit import prompt
 from prompt_toolkit.patch_stdout import patch_stdout
 
 # Prompt for port
-port = int(input("Enter Port number: "))
-node = Node("127.0.0.1", port)
+ip = str(input("Ip Address: "))
+# Prompt for port
+port = int(input("Port number: "))
+node = Node(ip, port)
 
 def cli_loop():
     while True:
