@@ -68,6 +68,8 @@ def cli_loop():
 
         elif command == "EXIT":
             print("Exiting...")
+            node.stop_event.set()
+            node.sock.close()
             sys.exit()
 
         else:

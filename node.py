@@ -234,14 +234,21 @@ class Node:
                 self.send_message(self.successor["ip"], self.successor["port"], f"REPLICATE {key} {value}")
             print(f"Node {self.id} transferred data to successor {self.successor['id']}")
             self.send_message(self.successor["ip"], self.successor["port"], 
-                              f"UPDATE_PREDECESSOR_TO {self.predecessor['ip']} {self.predecessor['port']} {self.predecessor['id']}")
+            f"UPDATE_PREDECESSOR_TO {self.predecessor['ip']} {self.predecessor['port']} {self.predecessor['id']}")
         if self.predecessor and self.predecessor["id"] != self.id:
             self.send_message(self.predecessor["ip"], self.predecessor["port"], 
-                              f"UPDATE_SUCCESSOR_TO {self.successor['ip']} {self.successor['port']} {self.successor['id']}")
+            f"UPDATE_SUCCESSOR_TO {self.successor['ip']} {self.successor['port']} {self.successor['id']}")
         time.sleep(0.5)
-        self.stop_event.set()
+
+        # Reset node state to an isolated state so it can rejoin later if desired
+        self.predecessor = None
+        self.successor = {"ip": self.ip, "port": self.port, "id": self.id}
+        self.successor_list = [self.successor]
+        self.chord.finger_table = [self.successor for _ in range(self.chord.m)]
+        
+        # self.stop_event.set()
         print(f"Node {self.id} has exited the Chord ring.")
-        self.sock.close()
+        # self.sock.close()
 
 # --- For testing purposes ---
 if __name__ == "__main__":
