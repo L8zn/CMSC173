@@ -20,6 +20,8 @@ def cli_loop():
                 "  JOIN <ip> <port>\n"
                 "  STORE <key> <value>\n"
                 "  LOOKUP <key>\n"
+                "  STORE_FILE <file_name> <file_data>\n"
+                "  LOOKUP_FILE <file_name>\n"
                 "  LEAVE\n"
                 "  INFO\n"
                 "  EXIT\n"
@@ -59,6 +61,21 @@ def cli_loop():
                 continue
             key = args[0]
             node.lookup(key)
+        
+        elif command == "STORE_FILE":
+            if len(args) < 2:
+                print("Usage: STORE_FILE <file_name> <file_data>")
+                continue
+            file_name = args[0]
+            file_data = " ".join(args[1:])  # Allow multi-word file data
+            node.store_file(file_name, file_data)
+
+        elif command == "LOOKUP_FILE":
+            if len(args) != 1:
+                print("Usage: LOOKUP_FILE <file_name>")
+                continue
+            file_name = args[0]
+            node.lookup_file(file_name)
 
         elif command == "LEAVE":
             node.leave()

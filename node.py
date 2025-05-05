@@ -174,6 +174,19 @@ class Node:
             key = parts[1]
             value = parts[2]
             print(f"Lookup result for {key}: {value}")
+        # FILE SUPPORT
+        elif command == "STORE_FILE":
+            file_name = parts[1]
+            file_data = parts[2]
+            self.store_file(file_name, file_data)
+        elif command == "REPLICATE_FILE":
+            file_key = parts[1]
+            file_data = parts[2]
+            self.replica_store[file_key] = file_data  # Store the replica of the file
+            print(f"Node {self.id} replicated file: {file_key}")
+        elif command == "LOOKUP_FILE":
+            file_name = parts[1]
+            self.lookup_file(file_name)  # This will invoke the lookup_file method
 
     def join(self, known_node_ip, known_node_port):
         if known_node_ip == self.ip and known_node_port == self.port:
@@ -224,6 +237,55 @@ class Node:
 
     def lookup(self, key):
         self.send_message(self.ip, self.port, f"LOOKUP {key}")
+
+    def store_file(self, file_name, file_data):
+        # Generate file path
+        file_path = f"./files/{file_name}"
+        # Ensure the directory exists, if not, create it
+        import os
+        if not os.path.exists('./files'):
+            os.makedirs('./files')
+        # Store the file data on disk
+        with open(file_path, 'w') as file:
+            file.write(file_data)
+        # Hash the file name to get the key
+        file_key = hash_function(file_name)  
+        # Find the successor responsible for storing this file
+        successor = self.chord.find_successor(file_key)
+        if successor["id"] == self.id:
+            # Store the file path in the data store (instead of the actual data)
+            self.data_store[file_key] = file_path
+            print(f"Node {self.id} stored file: {file_name} at {file_path}")
+            # Replicate the file path to the successor nodes
+            for s in self.successor_list[1:]:
+                self.send_message(s["ip"], s["port"], f"REPLICATE_FILE {file_key} {file_path}")
+        else:
+            self.send_message(successor["ip"], successor["port"], f"STORE_FILE {file_name} {file_data}")
+    
+    def lookup_file(self, file_name):
+        # Hash the file name to get the key
+        file_key = hash_function(file_name)
+        # Find the successor responsible for the file
+        successor = self.chord.find_successor(file_key)
+        # If this node is responsible, retrieve the file path from data_store
+        if successor["id"] == self.id:
+            file_path = self.data_store.get(file_key, "NOT_FOUND")
+            if file_path == "NOT_FOUND":
+                print(f"File {file_name} not found on Node {self.id}.")
+                return None
+            else:
+                # Read the file content from the stored file path
+                try:
+                    with open(file_path, 'r') as file:
+                        file_data = file.read()
+                    print(f"File found on Node {self.id}: {file_data}")
+                    return file_data  # Return the file content
+                except Exception as e:
+                    print(f"Error reading file {file_name}: {e}")
+                    return None
+        # If this node is not responsible, send the lookup request to the successor
+        else:
+            self.send_message(successor["ip"], successor["port"], f"LOOKUP_FILE {file_name}")
 
     def leave(self):
         print(f"Node {self.id} leaving the network.")
